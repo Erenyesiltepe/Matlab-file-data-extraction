@@ -1,5 +1,8 @@
 from scipy.io import loadmat
 import pandas as pd
+import os
+
+folder_name = 'participants'
 
 def load_data(data_path):
     exp_data = loadmat(data_path)
@@ -20,8 +23,6 @@ def load_recall_data(data_path):
     exp_data = loadmat(data_path)
     data = exp_data['recalldata'][0]
     
-    import pdb; pdb.set_trace()
-    
     categories = [str(entry[0][0]) for entry in data]
     biomotion_names = [str(entry[1][0]) for entry in data]
     responses = [str(entry[2][0]) for entry in data]
@@ -33,15 +34,48 @@ def load_recall_data(data_path):
         'BiomotionName': biomotion_names,
         'Response': responses,
         'Time': time,
-        'Rating': rating
+        'Rating': rating,
+        'SeenPoint': ['-' for _ in data],
+        'NotSeenPoint': ['-' for _ in data],
     })
     return df    
 
-exp_data = load_recall_data("experimentRecall_data.mat")
-print(exp_data)
+def runForSubject(directory):
+    files = os.listdir(directory)
 
-# exp_recall_data = loadmat('experimentRecall_data.mat')['recalldata']
-# exp_recall_data = parse(exp_recall_data) 
+    recall_data_file = None
+    data_file = None
 
-# exp_data.to_excel('experimentData.xlsx', index=False)
-# exp_recall_data.to_excel('experimentDataRecall.xlsx', index=False)
+    for file in files:
+        if file.startswith('experimentRecall_data'):
+            recall_data_file = file
+        elif file.startswith('experimentData'):
+            data_file = file
+
+    subject = '_'.join(data_file.split('_')[1:])
+    
+    exp_recall_data = load_recall_data(os.path.join(directory, recall_data_file))
+    exp_data = load_data(os.path.join(directory, data_file))
+
+    for index, row in exp_recall_data.iterrows():
+        matching_rows = exp_data[exp_data['BiomotionName'] == row['BiomotionName']]
+        if matching_rows.empty:
+            if row['Response'] == 'x':
+                exp_recall_data.at[index, 'NotSeenPoint'] = '0'
+            else:
+                exp_recall_data.at[index, 'NotSeenPoint'] = '1'
+        else:
+            if row['Response'] == 'x':
+                exp_recall_data.at[index, 'SeenPoint'] = '1'
+            else:
+                exp_recall_data.at[index, 'SeenPoint'] = '0'
+
+    exp_recall_data.to_excel(os.path.join(directory, f'ResultExperimentData-{subject}.xlsx'), index=False)
+
+
+directory = os.getcwd()+'\\'+folder_name
+for root, dirs, files in os.walk(directory):
+    for dir_name in dirs:
+        runForSubject(os.path.join(root, dir_name))
+    break  # Only consider the top-level directories
+
